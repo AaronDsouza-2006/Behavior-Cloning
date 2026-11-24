@@ -19,7 +19,7 @@ class CobotEnv(gym.Env):
 
         self.steps = 0
         max_delta_const = 0.1
-        self.max_delta = np.array([2, 0.7, 0.7, 1, 1, 1, 0.2],dtype=np.float32) * max_delta_const
+        self.max_delta = np.array([2, 0.7, 0.7, 1, 1, 1, 1],dtype=np.float32) * max_delta_const
         self.max_speed = 8.0
         self.max_steps = 500
         self.viewer = None
@@ -99,7 +99,7 @@ class CobotEnv(gym.Env):
 
             mujoco.mj_forward(self.model, self.data)
 
-            if np.linalg.norm( self.data.xpos[1]- self.data.xpos[2]) > 0.1:
+            if np.linalg.norm( self.data.xpos[1]- self.data.xpos[2]) > 0.15:
                 break
 
 

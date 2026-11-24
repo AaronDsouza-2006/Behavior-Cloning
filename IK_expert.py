@@ -59,7 +59,7 @@ class IKExpert():
             rot_err_norm = 0         
         
         if (pos_err_norm < tolerance_pos and rot_err_norm < tolerance_rot):
-            return np.zeros(7), True
+            return np.zeros(6), True
 
         J= self.get_jacobian()
 

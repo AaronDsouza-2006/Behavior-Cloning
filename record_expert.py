@@ -17,8 +17,6 @@ class RecordExpert(IKExpert):
                  ):
         super().__init__(env)
 
-        dataset_path = "./datasets/pick_place_ik_test"
-
         features = {
             "observation.state" : {
                 "dtype": "float32",
@@ -133,12 +131,121 @@ class RecordExpert(IKExpert):
             print('discarding episode')
             self.dataset.clear_episode_buffer()
 
+    def pick_place_action(self, observation):
+        cube_pos = np.array(observation[14:17]) + np.array([0.0, 0.0, 0.015])
+        disk_pos = np.array(observation[17:20]) + np.array([0.0, 0.0, 0.05])
+        current_pos = np.array(observation[20:23])
+
+        cube_approach_pos = cube_pos + np.array([0.0, 0.0, 0.15])
+        disk_approach_pos = disk_pos + np.array([0.0, 0.0, 0.15])
+
+        close = np.array([-0.5, -0.5])
+        open = np.array([0.5, 0.5])
+        gripper = None
+        
+        if(self.is_contact_present()):
+            disk_distance = np.linalg.norm(cube_pos - disk_pos)
+            if disk_distance < 0.1:
+                # print(1)
+                dq, is_end = self.move_to_step(disk_pos, target_rot_mat=None, max_speed=0.1)
+                if disk_distance < 0.05:
+                    #gripper = open
+                    return None
+                else:
+                    gripper = close
+            else:
+                # print(2)
+                dq, _ = self.move_to_step(disk_approach_pos, target_rot_mat=None, max_speed=0.1)
+                gripper = close
+
+        else:
+            target_rot_mat = self.euler_to_matrix(np.array([0, 1.57, 0]))
+            cube_distance = np.linalg.norm(current_pos - cube_pos)
+
+            if(cube_distance < 0.1):
+                
+                dq, is_end =  self.move_to_step(cube_pos, target_rot_mat=target_rot_mat,tolerance_pos=0.01, max_speed=0.05)
+                if is_end:
+                    gripper = close
+                    cmd = np.concatenate([np.zeros(6), gripper], dtype=np.float32)
+                    cmd = self.env.sim2real(cmd)
+                    for _ in range(5):
+                        observation = self.env.get_observation()
+                        expert.env.apply_action(cmd)
+                        self.dataset.add_frame({
+                            "observation.state": observation,
+                            "action": cmd,
+                            "task": "pick up the cube and place it on the disk",
+                        })
+                
+                else:
+                    gripper = open
+
+            else:
+                # print(5)
+                dq, _ = self.move_to_step(cube_approach_pos, target_rot_mat=target_rot_mat, max_speed=0.1)
+                gripper = open
+        
+        action = np.concat([dq, gripper], dtype=np.float32)
+        return self.env.sim2real(action) 
+
+    def record_episode2(self):
+        self.env.reset()
+
+        for itr in range(500):
+            observation = self.env.get_observation()
+            action = self.pick_place_action(observation)
+            if action is None:
+                print('saving episode')
+                self.dataset.save_episode()
+                return
+            else:
+                self.env.apply_action(action)
+                self.dataset.add_frame({
+                    "observation.state": observation,
+                    "action": action,
+                    "task": "pick up the cube and place it on the disk",
+                })
+                if self.env.render_mode == 'human':
+                    self.env.render()
+        else:
+            print('discarding episode')
+            self.dataset.clear_episode_buffer()
+
+    def record_episode3(self):
+        from pick_place_expert import PickPlaceExpert
+        expert = PickPlaceExpert(self.env)
+
+        self.env.reset()
+
+        for itr in range(500):
+            observation = self.env.get_observation()
+            action = expert(observation)
+            if action is None:
+                print('saving episode')
+                self.dataset.save_episode()
+                return
+            else:
+                self.env.apply_action(action)
+                self.dataset.add_frame({
+                    "observation.state": observation,
+                    "action": action,
+                    "task": "pick up the cube and place it on the disk",
+                })
+                if self.env.render_mode == 'human':
+                    self.env.render()
+        else:
+            print('discarding episode')
+            self.dataset.clear_episode_buffer()
+        
+
 if __name__=="__main__":
+    
     datasets.logging.disable_progress_bar()
-    expert = RecordExpert(name='pick_place_200')
-    n_episodes = 2000
+    expert = RecordExpert(name='trial_x', env = CobotBcEnv(render_mode="human"))
+    n_episodes = 5
     while expert.dataset.num_episodes < n_episodes:
-        expert.record_episode()
+        expert.record_episode3()
         print(str(expert.dataset.num_episodes))
     expert.dataset.finalize()
     print('dataset created')
